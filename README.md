@@ -318,4 +318,28 @@ def validate_input(question):
         raise HTTPException(status_code=400, detail="Invalid input")
 ```
 
-これらの手法を用いることで、効率的かつ安全にデータを検索することができます。 "# RagAzure" 
+これらの手法を用いることで、効率的かつ安全にデータを検索することができます。
+
+## LLM Switching Feature
+
+This project includes a feature that automatically switches between different Language Learning Models (LLMs) based on the accuracy of their responses.
+
+### Configuration
+
+- Set the environment variable `LLM_CHOICE` to choose the default LLM. Options are `gpt4all` or `openai`.
+  ```bash
+  export LLM_CHOICE=gpt4all  # or 'openai'
+  ```
+
+### Testing the LLM Switching
+
+1. **Run the Application**: Start the application using the command:
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+2. **Test Questions**: Use predefined test questions to evaluate the accuracy of the LLM responses. If the accuracy is low, the system will automatically switch to another LLM.
+
+3. **Monitor Logs**: Check the application logs to verify that the LLM switching occurs as expected when the accuracy threshold is not met.
+
+4. **Adjust Thresholds**: Modify the accuracy evaluation logic in `main.py` if needed to better suit your use case.

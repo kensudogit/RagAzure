@@ -1,16 +1,16 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from azure.cosmos import CosmosClient
-import requests
-import os
-import json
 from spellchecker import SpellChecker
 from cachetools import cached, TTLCache
 from langchain.llms import GPT4All
 from langchain.chat_models import OpenAIClient
+from bs4 import BeautifulSoup
+import requests
+import os
+import json
 
 app = FastAPI()
-
 # Define a model for the user input
 # ユーザー入力のモデルを定義
 class UserInput(BaseModel):
@@ -25,9 +25,7 @@ database = cosmos_client.get_database_client(database_name)
 container = database.get_container_client(container_name)
 
 spell = SpellChecker()
-
 dataset = load_dataset('medical_dialog', 'processed.en')
-
 df = pd.DataFrame(dataset['train'])
 
 dialog = []
@@ -49,10 +47,13 @@ loader = TextLoader('medical_data.txt', encoding="utf-8")
 index = VectorstoreIndexCreator(embedding= HuggingFaceEmbeddings()).from_loaders([loader])
 
 # Add a configuration setting for LLM selection
-llm_choice = os.getenv('LLM_CHOICE', 'gpt4all')  # Default to 'gpt4all'
+# LLMの選択に基づいて初期化
+# デフォルトは 'gpt4all'
+llm_choice = os.getenv('LLM_CHOICE', 'gpt4all')
 
 # Modify LLM initialization based on the choice
 if llm_choice == 'gpt4all':
+    # GPT4Allモデルの初期化
     llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
     callbacks = [StreamingStdOutCallbackHandler()]
     llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
@@ -140,31 +141,32 @@ def evaluate_response_accuracy(response, expected_answer):
 async def ask_question(user_input: UserInput):
     try:
         # 入力のバリデーション
+        # 質問が空でないか、長すぎないかを確認
         validate_input(user_input.question)
         
         # データの検索
+        # 質問に関連するデータをキャッシュを利用して検索
         items = search_data_with_cache(user_input.question)
         
         if not items:
             return {"answer": "I'm sorry, I couldn't find any relevant information. Can I help you with something else?"}
         
         # 取得したデータを使用して応答を生成
+        # 検索結果を基にAIが応答を生成
         response_data = items[0]
         prompt = f"User question: {user_input.question}\nRelevant data: {response_data}\nGenerate a response."
         ai_response = await call_openai_api(prompt)
         
-        # Evaluate the response accuracy
         # 応答の精度を評価
+        # テスト質問に対する応答が期待通りかを確認
         for test in TEST_QUESTIONS:
             if user_input.question == test["question"]:
                 if not evaluate_response_accuracy(ai_response, test["expected_answer"]):
-                    # Switch LLM if accuracy is low
                     # 精度が低い場合はLLMを切り替える
                     if llm_choice == 'gpt4all':
                         llm_choice = 'openai'
                     else:
                         llm_choice = 'gpt4all'
-                    # Reinitialize LLM
                     # LLMを再初期化
                     if llm_choice == 'gpt4all':
                         llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
@@ -183,4 +185,75 @@ async def ask_question(user_input: UserInput):
 # ヘルスチェックエンドポイント
 @app.get("/")
 async def root():
-    return {"message": "AI Chat System is running"} 
+    return {"message": "AI Chat System is running"}
+
+def fact_check(statement):
+    # ウェブ検索を行う
+    search_url = f"https://www.google.com/search?q={statement}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(search_url, headers=headers)
+    
+    # 検索結果を解析
+    soup = BeautifulSoup(response.text, 'html.parser')
+    results = soup.find_all('div', class_='BNeawe vvjwJb AP7Wnd')
+    
+    # 結果を評価
+    for result in results:
+        print(result.get_text())
+
+# 例として、ファクトチェックを行う
+fact_check("Pythonは最も人気のあるプログラミング言語です")
+
+# Endpoint for Customer Support Assistance
+@app.post("/customer_support")
+async def customer_support(user_input: UserInput):
+    # Implement logic for customer support assistance
+    return {"message": "Customer support assistance is not yet implemented."}
+
+# Endpoint for Internal Information Inquiry Support
+@app.post("/internal_info_inquiry")
+async def internal_info_inquiry(user_input: UserInput):
+    # Implement logic for internal information inquiry
+    return {"message": "Internal information inquiry support is not yet implemented."}
+
+# Endpoint for Patent Research Support
+@app.post("/patent_research")
+async def patent_research(user_input: UserInput):
+    # Implement logic for patent research support
+    return {"message": "Patent research support is not yet implemented."}
+
+# Endpoint for Product Manual Creation Support
+@app.post("/product_manual_creation")
+async def product_manual_creation(user_input: UserInput):
+    # Implement logic for product manual creation
+    return {"message": "Product manual creation support is not yet implemented."}
+
+# Endpoint for Legal Support
+@app.post("/legal_support")
+async def legal_support(user_input: UserInput):
+    # Implement logic for legal support
+    return {"message": "Legal support is not yet implemented."}
+
+# Endpoint for Travel Planning Support
+@app.post("/travel_planning")
+async def travel_planning(user_input: UserInput):
+    # Implement logic for travel planning support
+    return {"message": "Travel planning support is not yet implemented."}
+
+# Endpoint for Medical Diagnosis Support
+@app.post("/medical_diagnosis")
+async def medical_diagnosis(user_input: UserInput):
+    # Implement logic for medical diagnosis support
+    return {"message": "Medical diagnosis support is not yet implemented."}
+
+# Endpoint for Academic Research Support
+@app.post("/academic_research")
+async def academic_research(user_input: UserInput):
+    # Implement logic for academic research support
+    return {"message": "Academic research support is not yet implemented."}
+
+# Endpoint for Coding Support
+@app.post("/coding_support")
+async def coding_support(user_input: UserInput):
+    # Implement logic for coding support
+    return {"message": "Coding support is not yet implemented."} 
