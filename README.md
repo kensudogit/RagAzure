@@ -240,7 +240,7 @@ git push -u origin master
    - Create and activate a virtual environment (optional but recommended):
      ```bash
      # On Windows
-     python -m venv venv
+    python -m venv venv 
      .\venv\Scripts\activate
 
      # On macOS/Linux
@@ -377,3 +377,63 @@ This project includes a feature that automatically switches between different La
 
 5. **動作確認**
    - ブラウザで `http://localhost:8000` にアクセスし、アプリケーションが正常に動作していることを確認します。
+
+## スクレイピングとアップロードスクリプトのセットアップ
+
+このセクションでは、ウェブサイトからデータをスクレイピングし、Azure Blob Storageにアップロードするスクリプトのセットアップ手順を説明します。
+
+1. **Azure Blob Storageの設定**
+   - AzureポータルでBlob Storageアカウントを作成し、接続文字列を取得します。
+   - コンテナを作成し、データを保存する準備をします。
+
+2. **Python環境のセットアップ**
+   - Pythonをインストールし、仮想環境を作成します。
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Windowsの場合は `venv\Scripts\activate`
+   ```
+   - 必要なライブラリをインストールします。
+   ```bash
+   pip install requests beautifulsoup4 azure-storage-blob
+   ```
+
+3. **スクリプトの実行**
+   - `crape_and_upload.py` または `scrape_to_md_json_and_upload.py` を実行して、データをスクレイピングし、Azure Blob Storageにアップロードします。
+   ```bash
+   python crape_and_upload.py
+   ```
+   または
+   ```bash
+   python scrape_to_md_json_and_upload.py
+   ```
+
+4. **結果の確認**
+   - AzureポータルでBlob Storageを確認し、データが正しくアップロードされていることを確認します。
+
+from llamacpp import LlamaIndex
+
+# データセットのロード
+dataset_path = 'path/to/your/dataset'
+index = LlamaIndex(dataset_path)
+index.build()
+
+@app.post("/ask")
+async def ask_question(user_input: UserInput):
+    try:
+        validate_input(user_input.question)
+        
+        # LlamaIndexを使用してデータを検索
+        results = index.search(user_input.question)
+        
+        if not results:
+            return {"answer": "I'm sorry, I couldn't find any relevant information. Can I help you with something else?"}
+        
+        # 検索結果を基に応答を生成
+        response_data = results[0]
+        prompt = f"User question: {user_input.question}\nRelevant data: {response_data}\nGenerate a response."
+        ai_response = await call_openai_api(prompt)
+        
+        return {"answer": ai_response}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

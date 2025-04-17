@@ -6,13 +6,15 @@ from cachetools import cached, TTLCache
 from langchain.llms import GPT4All
 from langchain.chat_models import OpenAIClient
 from bs4 import BeautifulSoup
+from datasets import load_dataset
 import requests
 import os
 import json
+from abc import ABC, abstractmethod
 
 app = FastAPI()
-# Define a model for the user input
 # ユーザー入力のモデルを定義
+# ユーザーからの質問を受け取るためのデータモデル
 class UserInput(BaseModel):
     question: str
 
@@ -228,17 +230,17 @@ async def product_manual_creation(user_input: UserInput):
     # Implement logic for product manual creation
     return {"message": "Product manual creation support is not yet implemented."}
 
-# Endpoint for Legal Support
-@app.post("/legal_support")
-async def legal_support(user_input: UserInput):
-    # Implement logic for legal support
-    return {"message": "Legal support is not yet implemented."}
+class LegalSupportService(SupportService):
+    async def handle_request(self, user_input: UserInput):
+        # Legal support logic
+        return {"message": "Legal support is not yet implemented."}
 
-# Endpoint for Travel Planning Support
-@app.post("/travel_planning")
-async def travel_planning(user_input: UserInput):
-    # Implement logic for travel planning support
-    return {"message": "Travel planning support is not yet implemented."}
+class TravelPlanningSupportService(SupportService):
+    async def handle_request(self, user_input: UserInput):
+        # Travel planning logic
+        return {"message": "Travel planning support is not yet implemented."}
+
+# 他のサポートサービスも同様に実装
 
 # Endpoint for Medical Diagnosis Support
 @app.post("/medical_diagnosis")
@@ -256,4 +258,21 @@ async def academic_research(user_input: UserInput):
 @app.post("/coding_support")
 async def coding_support(user_input: UserInput):
     # Implement logic for coding support
-    return {"message": "Coding support is not yet implemented."} 
+    return {"message": "Coding support is not yet implemented."}
+
+class SupportService(ABC):
+    @abstractmethod
+    async def handle_request(self, user_input: UserInput):
+        pass
+
+@app.post("/legal_support")
+async def legal_support(user_input: UserInput):
+    service = LegalSupportService()
+    return await service.handle_request(user_input)
+
+@app.post("/travel_planning")
+async def travel_planning(user_input: UserInput):
+    service = TravelPlanningSupportService()
+    return await service.handle_request(user_input)
+
+# 他のエンドポイントも同様に更新 
