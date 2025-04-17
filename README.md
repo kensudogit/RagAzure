@@ -343,3 +343,37 @@ This project includes a feature that automatically switches between different La
 3. **Monitor Logs**: Check the application logs to verify that the LLM switching occurs as expected when the accuracy threshold is not met.
 
 4. **Adjust Thresholds**: Modify the accuracy evaluation logic in `main.py` if needed to better suit your use case.
+
+## ビルド手順
+
+1. **リポジトリのクローン**
+   - このプロジェクトのリポジトリをローカルマシンにクローンします。
+   ```bash
+   git clone <repository-url>
+   cd <repository-directory>
+   ```
+
+2. **Python環境のセットアップ**
+   - 仮想環境を作成し、必要なパッケージをインストールします。
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Windowsの場合は `venv\Scripts\activate`
+   pip install -r requirements.txt
+   ```
+
+3. **環境変数の設定**
+   - 必要なAzureサービスの接続情報やAPIキーを環境変数として設定します。
+   ```bash
+   export COSMOS_ENDPOINT=<your-cosmos-endpoint>
+   export COSMOS_KEY=<your-cosmos-key>
+   export OPENAI_API_KEY=<your-openai-api-key>
+   ```
+
+4. **アプリケーションの起動**
+   - FastAPIアプリケーションを起動します。
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+5. **動作確認**
+   - ブラウザで `http://localhost:8000` にアクセスし、アプリケーションが正常に動作していることを確認します。
