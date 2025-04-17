@@ -281,4 +281,41 @@ set COSMOS_KEY=<your-cosmos-key>
 
 # macOS/Linuxの場合
 export COSMOS_ENDPOINT=<your-cosmos-endpoint>
-export COSMOS_KEY=<your-cosmos-key> "# RagAzure" 
+export COSMOS_KEY=<your-cosmos-key>
+
+## データ検索の実装
+
+### 効率的なデータ検索
+既存データを検索するために、Azure Cosmos DBを使用します。以下の手順でデータを効率的に検索します。
+
+1. **インデックスの利用**: データベースのインデックスを適切に設定し、検索速度を向上させます。
+2. **キャッシュの利用**: `cachetools`を使用して、検索結果をキャッシュし、データベースへのアクセス回数を減らします。
+
+#### サンプルコード
+```python
+from cachetools import cached, TTLCache
+
+# キャッシュを設定（TTL: 10分）
+cache = TTLCache(maxsize=100, ttl=600)
+
+@cached(cache)
+def search_data_with_cache(question):
+    return search_data_in_cosmosdb(question)
+```
+
+### セキュリティ要件
+データ検索におけるセキュリティを強化するために、以下の点を考慮します。
+
+1. **入力のバリデーション**: ユーザーからの入力を適切にバリデーションし、SQLインジェクションなどの攻撃を防ぎます。
+2. **環境変数の利用**: APIキーやデータベースの接続情報は環境変数を使用して管理します。
+
+#### サンプルコード
+```python
+from fastapi import HTTPException
+
+def validate_input(question):
+    if not question or len(question) > 256:
+        raise HTTPException(status_code=400, detail="Invalid input")
+```
+
+これらの手法を用いることで、効率的かつ安全にデータを検索することができます。 "# RagAzure" 
