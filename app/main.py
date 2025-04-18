@@ -11,7 +11,10 @@ import requests
 import os
 import json
 from abc import ABC, abstractmethod
+import azure.storage.blob as azure_blob
+from azure.identity import DefaultAzureCredential
 
+# FastAPIアプリケーションのインスタンスを作成
 app = FastAPI()
 # ユーザー入力のモデルを定義
 # ユーザーからの質問を受け取るためのデータモデル
@@ -20,6 +23,7 @@ class UserInput(BaseModel):
 
 # Initialize CosmosDB client
 # CosmosDBクライアントを初期化
+# Azure CosmosDBに接続するためのクライアントを設定
 cosmos_client = CosmosClient(os.getenv('COSMOS_ENDPOINT'), os.getenv('COSMOS_KEY'))
 database_name = 'your-database-name'
 container_name = 'your-container-name'
@@ -276,3 +280,54 @@ async def travel_planning(user_input: UserInput):
     return await service.handle_request(user_input)
 
 # 他のエンドポイントも同様に更新 
+
+# Function to extract article titles and links from HTML
+# HTMLから記事タイトルとリンクを抽出する関数
+def extract_articles_from_html(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    articles = []
+    for link in soup.find_all('a', href=True):
+        title = link.get_text()
+        url = link['href']
+        articles.append({'title': title, 'url': url})
+    return articles
+
+# Function to save JSON data to Azure Blob Storage
+# JSONデータをAzure Blob Storageに保存する関数
+def save_json_to_blob(data, container_name, blob_name):
+    try:
+        # Use DefaultAzureCredential to authenticate with Managed Identity
+        credential = DefaultAzureCredential()
+        blob_service_client = azure_blob.BlobServiceClient(
+            account_url=f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net",
+            credential=credential
+        )
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        blob_client.upload_blob(json.dumps(data), overwrite=True)
+        print(f"Data successfully saved to blob: {blob_name}")
+    except Exception as e:
+        print(f"Failed to save data to blob: {str(e)}")
+
+# Example usage
+html_content = "<html><body><a href='https://example.com/article1'>Article 1</a><a href='https://example.com/article2'>Article 2</a></body></html>"
+articles = extract_articles_from_html(html_content)
+json_data = json.dumps(articles, ensure_ascii=False, indent=2)
+save_json_to_blob(json_data, 'your-container-name', 'articles.json')
+
+def send_teams_notification(webhook_url, message):
+    headers = {
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "text": message
+    }
+    response = requests.post(webhook_url, headers=headers, json=payload)
+    if response.status_code == 200:
+        print("Notification sent to Teams successfully.")
+    else:
+        print(f"Failed to send notification to Teams: {response.status_code}")
+
+# Example usage
+webhook_url = "https://outlook.office.com/webhook/your-webhook-url"
+message = "A new blob has been uploaded."
+send_teams_notification(webhook_url, message) 

@@ -127,6 +127,25 @@ def main():
     
     print("AIの応答:", response)
 
+    # 応答の精度を評価
+    # テスト質問に対する応答が期待通りかを確認
+    for test in TEST_QUESTIONS:
+        if user_question == test["question"]:
+            if not evaluate_response_accuracy(response, test["expected_answer"]):
+                # 精度が低い場合はLLMを切り替える
+                if llm_choice == 'gpt4all':
+                    llm_choice = 'openai'
+                else:
+                    llm_choice = 'gpt4all'
+                # LLMを再初期化
+                if llm_choice == 'gpt4all':
+                    llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
+                    callbacks = [StreamingStdOutCallbackHandler()]
+                    llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
+                elif llm_choice == 'openai':
+                    llm = OpenAIClient(api_key=os.getenv('OPENAI_API_KEY'))
+                break
+
 if __name__ == "__main__":
     main()
 
@@ -258,6 +277,8 @@ git push -u origin master
      ```bash
      export COSMOS_ENDPOINT="<your-cosmos-endpoint>"
      export COSMOS_KEY="<your-cosmos-key>"
+     export OPENAI_API_KEY="<your-openai-api-key>"
+     export AZURE_STORAGE_ACCOUNT_NAME="<your-storage-account-name>"
      ```
 
 ## Running the Application
@@ -278,10 +299,14 @@ git push -u origin master
 # Windowsの場合
 set COSMOS_ENDPOINT=<your-cosmos-endpoint>
 set COSMOS_KEY=<your-cosmos-key>
+set OPENAI_API_KEY=<your-openai-api-key>
+set AZURE_STORAGE_ACCOUNT_NAME=<your-storage-account-name>
 
 # macOS/Linuxの場合
 export COSMOS_ENDPOINT=<your-cosmos-endpoint>
 export COSMOS_KEY=<your-cosmos-key>
+export OPENAI_API_KEY=<your-openai-api-key>
+export AZURE_STORAGE_ACCOUNT_NAME=<your-storage-account-name>
 
 ## データ検索の実装
 
@@ -367,6 +392,7 @@ This project includes a feature that automatically switches between different La
    export COSMOS_ENDPOINT=<your-cosmos-endpoint>
    export COSMOS_KEY=<your-cosmos-key>
    export OPENAI_API_KEY=<your-openai-api-key>
+   export AZURE_STORAGE_ACCOUNT_NAME=<your-storage-account-name>
    ```
 
 4. **アプリケーションの起動**
@@ -420,18 +446,41 @@ index.build()
 @app.post("/ask")
 async def ask_question(user_input: UserInput):
     try:
+        # 入力のバリデーション
+        # 質問が空でないか、長すぎないかを確認
         validate_input(user_input.question)
         
-        # LlamaIndexを使用してデータを検索
-        results = index.search(user_input.question)
+        # データの検索
+        # 質問に関連するデータをキャッシュを利用して検索
+        items = search_data_with_cache(user_input.question)
         
-        if not results:
+        if not items:
             return {"answer": "I'm sorry, I couldn't find any relevant information. Can I help you with something else?"}
         
-        # 検索結果を基に応答を生成
-        response_data = results[0]
+        # 取得したデータを使用して応答を生成
+        # 検索結果を基にAIが応答を生成
+        response_data = items[0]
         prompt = f"User question: {user_input.question}\nRelevant data: {response_data}\nGenerate a response."
         ai_response = await call_openai_api(prompt)
+        
+        # 応答の精度を評価
+        # テスト質問に対する応答が期待通りかを確認
+        for test in TEST_QUESTIONS:
+            if user_input.question == test["question"]:
+                if not evaluate_response_accuracy(ai_response, test["expected_answer"]):
+                    # 精度が低い場合はLLMを切り替える
+                    if llm_choice == 'gpt4all':
+                        llm_choice = 'openai'
+                    else:
+                        llm_choice = 'gpt4all'
+                    # LLMを再初期化
+                    if llm_choice == 'gpt4all':
+                        llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
+                        callbacks = [StreamingStdOutCallbackHandler()]
+                        llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
+                    elif llm_choice == 'openai':
+                        llm = OpenAIClient(api_key=os.getenv('OPENAI_API_KEY'))
+                    break
         
         return {"answer": ai_response}
     
@@ -573,3 +622,55 @@ async def ask_question(user_input: UserInput):
 - ユーザーやグループのアクセス権を設定し、プロジェクトのセキュリティを管理します。
 
 これらの手順を通じて、Azure DevOps Servicesを使用してプロジェクトの管理と継続的インテグレーション/デリバリーを効率化できます。
+
+# LLMの選択に基づいて初期化
+# デフォルトは 'gpt4all'
+llm_choice = os.getenv('LLM_CHOICE', 'gpt4all')
+
+# ヘルスチェックエンドポイント
+# サーバーが正常に動作しているかを確認するためのエンドポイント
+@app.get("/")
+async def root():
+    return {"message": "AI Chat System is running"}
+
+# HTMLから記事タイトルとリンクを抽出する関数
+# BeautifulSoupを使用してHTMLコンテンツを解析し、記事のタイトルとリンクを抽出
+def extract_articles_from_html(html_content):
+    soup = BeautifulSoup(html_content, 'html.parser')
+    articles = []
+    for link in soup.find_all('a', href=True):
+        title = link.get_text()
+        url = link['href']
+        articles.append({'title': title, 'url': url})
+    return articles
+
+# JSONデータをAzure Blob Storageに保存する関数
+# AzureのBlob Storageにデータを保存するための関数
+def save_json_to_blob(data, container_name, blob_name):
+    try:
+        # Use DefaultAzureCredential to authenticate with Managed Identity
+        credential = DefaultAzureCredential()
+        blob_service_client = azure_blob.BlobServiceClient(
+            account_url=f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net",
+            credential=credential
+        )
+        blob_client = blob_service_client.get_blob_client(container=container_name, blob=blob_name)
+        blob_client.upload_blob(json.dumps(data), overwrite=True)
+        print(f"Data successfully saved to blob: {blob_name}")
+    except Exception as e:
+        print(f"Failed to save data to blob: {str(e)}")
+
+# Microsoft Teamsに通知を送信する関数
+# 指定されたWebhook URLを使用してTeamsにメッセージを送信
+def send_teams_notification(webhook_url, message):
+    headers = {
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "text": message
+    }
+    response = requests.post(webhook_url, headers=headers, json=payload)
+    if response.status_code == 200:
+        print("Notification sent to Teams successfully.")
+    else:
+        print(f"Failed to send notification to Teams: {response.status_code}")
