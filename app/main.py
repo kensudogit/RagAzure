@@ -13,9 +13,12 @@ import json
 from abc import ABC, abstractmethod
 import azure.storage.blob as azure_blob
 from azure.identity import DefaultAzureCredential
+from langchain_core.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 
 # FastAPIアプリケーションのインスタンスを作成
+# FastAPIを使用してWebアプリケーションを構築するためのインスタンス
 app = FastAPI()
+
 # ユーザー入力のモデルを定義
 # ユーザーからの質問を受け取るためのデータモデル
 class UserInput(BaseModel):
@@ -92,6 +95,7 @@ def preprocess_input(question):
 async def call_openai_api(prompt):
     try:
         # Define the API endpoint and headers
+        # APIエンドポイントとヘッダーを定義
         api_url = "https://<your-openai-endpoint>/openai/deployments/<deployment-id>/completions?api-version=2022-12-01"
         headers = {
             "Content-Type": "application/json",
@@ -99,16 +103,19 @@ async def call_openai_api(prompt):
         }
 
         # Define the payload
+        # リクエストのペイロードを定義
         payload = {
             "prompt": prompt,
             "max_tokens": 150
         }
 
         # Make the POST request
+        # POSTリクエストを送信
         response = requests.post(api_url, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
 
         # Parse the response
+        # レスポンスを解析
         result = response.json()
         return result['choices'][0]['text']
 
@@ -124,6 +131,9 @@ def validate_input(question):
 cache = TTLCache(maxsize=100, ttl=600)
 
 @cached(cache)
+# キャッシュを利用してデータを検索する関数
+# 質問に関連するデータをCosmosDBから検索
+# キャッシュを利用して効率的にデータを取得
 def search_data_with_cache(question):
     return search_data_in_cosmosdb(question)
 
@@ -219,20 +229,78 @@ async def customer_support(user_input: UserInput):
 # Endpoint for Internal Information Inquiry Support
 @app.post("/internal_info_inquiry")
 async def internal_info_inquiry(user_input: UserInput):
-    # Implement logic for internal information inquiry
-    return {"message": "Internal information inquiry support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
+
+        # Preprocess the input
+        processed_question = preprocess_input(user_input.question)
+
+        # Search for relevant internal information using cache
+        items = search_data_with_cache(processed_question)
+
+        if not items:
+            return {"answer": "I'm sorry, I couldn't find any relevant internal information."}
+
+        # Use the first item from the search results to generate a response
+        response_data = items[0]
+        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+        ai_response = await call_openai_api(prompt)
+
+        return {"answer": ai_response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint for Patent Research Support
 @app.post("/patent_research")
 async def patent_research(user_input: UserInput):
-    # Implement logic for patent research support
-    return {"message": "Patent research support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
 
-# Endpoint for Product Manual Creation Support
-@app.post("/product_manual_creation")
+        # Preprocess the input
+        processed_question = preprocess_input(user_input.question)
+
+        # Search for relevant patent data using cache
+        items = search_data_with_cache(processed_question)
+
+        if not items:
+            return {"answer": "I'm sorry, I couldn't find any relevant patent information."}
+
+        # Use the first item from the search results to generate a response
+        response_data = items[0]
+        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+        ai_response = await call_openai_api(prompt)
+
+        return {"answer": ai_response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def generate_product_manual(data):
+    # Placeholder logic for generating a product manual
+    manual_content = f"Product Manual for {data['product_name']}\n\nFeatures:\n{data['features']}\n\nInstructions:\n{data['instructions']}"
+    return manual_content
+
 async def product_manual_creation(user_input: UserInput):
-    # Implement logic for product manual creation
-    return {"message": "Product manual creation support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
+
+        # Example input processing (assuming JSON input)
+        input_data = json.loads(user_input.question)
+
+        # Generate the product manual
+        manual_content = generate_product_manual(input_data)
+
+        # Save the manual to a file (or database)
+        manual_filename = f"manuals/{input_data['product_name']}_manual.txt"
+        with open(manual_filename, 'w') as manual_file:
+            manual_file.write(manual_content)
+
+        # Return a success response
+        return {"message": "Product manual created successfully.", "manual_location": manual_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 class LegalSupportService(SupportService):
     async def handle_request(self, user_input: UserInput):
@@ -241,28 +309,97 @@ class LegalSupportService(SupportService):
 
 class TravelPlanningSupportService(SupportService):
     async def handle_request(self, user_input: UserInput):
-        # Travel planning logic
-        return {"message": "Travel planning support is not yet implemented."}
+        try:
+            # Validate the input
+            validate_input(user_input.question)
+
+            # Preprocess the input
+            processed_question = preprocess_input(user_input.question)
+
+            # Search for relevant travel data using cache
+            items = search_data_with_cache(processed_question)
+
+            if not items:
+                return {"answer": "I'm sorry, I couldn't find any relevant travel information."}
+
+            # Use the first item from the search results to generate a response
+            response_data = items[0]
+            prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+            ai_response = await call_openai_api(prompt)
+
+            return {"answer": ai_response}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 # 他のサポートサービスも同様に実装
 
 # Endpoint for Medical Diagnosis Support
 @app.post("/medical_diagnosis")
 async def medical_diagnosis(user_input: UserInput):
-    # Implement logic for medical diagnosis support
-    return {"message": "Medical diagnosis support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
+
+        # Preprocess the input
+        processed_question = preprocess_input(user_input.question)
+
+        # Search for relevant medical data using cache
+        items = search_data_with_cache(processed_question)
+
+        if not items:
+            return {"answer": "I'm sorry, I couldn't find any relevant medical information."}
+
+        # Use the first item from the search results to generate a response
+        response_data = items[0]
+        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+        ai_response = await call_openai_api(prompt)
+
+        return {"answer": ai_response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint for Academic Research Support
 @app.post("/academic_research")
 async def academic_research(user_input: UserInput):
-    # Implement logic for academic research support
-    return {"message": "Academic research support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
+
+        # Preprocess the input
+        processed_question = preprocess_input(user_input.question)
+
+        # Search for relevant data using cache
+        items = search_data_with_cache(processed_question)
+
+        if not items:
+            return {"answer": "I'm sorry, I couldn't find any relevant information for your academic research."}
+
+        # Use the first item from the search results to generate a response
+        response_data = items[0]
+        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+        ai_response = await call_openai_api(prompt)
+
+        return {"answer": ai_response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Endpoint for Coding Support
 @app.post("/coding_support")
 async def coding_support(user_input: UserInput):
-    # Implement logic for coding support
-    return {"message": "Coding support is not yet implemented."}
+    try:
+        # Validate the input
+        validate_input(user_input.question)
+
+        # Preprocess the input
+        processed_question = preprocess_input(user_input.question)
+
+        # Generate a response using the LLM
+        response = llm_chain.run(processed_question)
+
+        # Return the response
+        return {"answer": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 class SupportService(ABC):
     @abstractmethod
@@ -297,6 +434,7 @@ def extract_articles_from_html(html_content):
 def save_json_to_blob(data, container_name, blob_name):
     try:
         # Use DefaultAzureCredential to authenticate with Managed Identity
+        # Managed Identityを使用して認証
         credential = DefaultAzureCredential()
         blob_service_client = azure_blob.BlobServiceClient(
             account_url=f"https://{os.getenv('AZURE_STORAGE_ACCOUNT_NAME')}.blob.core.windows.net",
@@ -309,11 +447,14 @@ def save_json_to_blob(data, container_name, blob_name):
         print(f"Failed to save data to blob: {str(e)}")
 
 # Example usage
+# 例として、HTMLから記事を抽出し、Azure Blobに保存する
 html_content = "<html><body><a href='https://example.com/article1'>Article 1</a><a href='https://example.com/article2'>Article 2</a></body></html>"
 articles = extract_articles_from_html(html_content)
 json_data = json.dumps(articles, ensure_ascii=False, indent=2)
 save_json_to_blob(json_data, 'your-container-name', 'articles.json')
 
+# Function to send a notification to Microsoft Teams
+# Microsoft Teamsに通知を送信する関数
 def send_teams_notification(webhook_url, message):
     headers = {
         "Content-Type": "application/json"
@@ -328,6 +469,7 @@ def send_teams_notification(webhook_url, message):
         print(f"Failed to send notification to Teams: {response.status_code}")
 
 # Example usage
+# 例として、Teamsに通知を送信する
 webhook_url = "https://outlook.office.com/webhook/your-webhook-url"
 message = "A new blob has been uploaded."
 send_teams_notification(webhook_url, message) 
