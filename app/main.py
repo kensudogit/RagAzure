@@ -70,7 +70,7 @@ if llm_choice == 'gpt4all':
     # GPT4Allモデルの初期化
     llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
     callbacks = [StreamingStdOutCallbackHandler()]
-    llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
+    # llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
 elif llm_choice == 'openai':
     # Example for OpenAI LLM initialization
     llm = OpenAIClient(api_key=os.getenv('OPENAI_API_KEY'))
@@ -142,6 +142,15 @@ cache = TTLCache(maxsize=100, ttl=600)
 def search_data_with_cache(question):
     return search_data_in_cosmosdb(question)
 
+def search_data_in_cosmosdb(question):
+    # Query CosmosDB for relevant data
+    query = f"SELECT * FROM c WHERE CONTAINS(c.question, '{question}')"
+    items = list(container.query_items(
+        query=query,
+        enable_cross_partition_query=True
+    ))
+    return items
+
 # Define a set of test questions and expected answers
 # テスト質問と期待される回答のセットを定義
 TEST_QUESTIONS = [
@@ -192,7 +201,7 @@ async def ask_question(user_input: UserInput):
                     if llm_choice == 'gpt4all':
                         llm_path = './model/ggml-gpt4all-j-v1.3-groovy.bin'
                         callbacks = [StreamingStdOutCallbackHandler()]
-                        llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
+                        # llm = GPT4All(model=llm_path, callbacks=callbacks, verbose=True, backend='gptj')
                     elif llm_choice == 'openai':
                         llm = OpenAIClient(api_key=os.getenv('OPENAI_API_KEY'))
                     break
@@ -307,10 +316,34 @@ async def product_manual_creation(user_input: UserInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class SupportService(ABC):
+    @abstractmethod
+    async def handle_request(self, user_input: UserInput):
+        pass
+
 class LegalSupportService(SupportService):
     async def handle_request(self, user_input: UserInput):
-        # Legal support logic
-        return {"message": "Legal support is not yet implemented."}
+        try:
+            # Validate the input
+            validate_input(user_input.question)
+
+            # Preprocess the input
+            processed_question = preprocess_input(user_input.question)
+
+            # Search for relevant legal data using cache
+            items = search_data_with_cache(processed_question)
+
+            if not items:
+                return {"answer": "I'm sorry, I couldn't find any relevant legal information."}
+
+            # Use the first item from the search results to generate a response
+            response_data = items[0]
+            prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
+            ai_response = await call_openai_api(prompt)
+
+            return {"answer": ai_response}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
 class TravelPlanningSupportService(SupportService):
     async def handle_request(self, user_input: UserInput):
@@ -335,86 +368,6 @@ class TravelPlanningSupportService(SupportService):
             return {"answer": ai_response}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
-
-# 他のサポートサービスも同様に実装
-
-# Endpoint for Medical Diagnosis Support
-@app.post("/medical_diagnosis")
-async def medical_diagnosis(user_input: UserInput):
-    try:
-        # Validate the input
-        validate_input(user_input.question)
-
-        # Preprocess the input
-        processed_question = preprocess_input(user_input.question)
-
-        # Search for relevant medical data using cache
-        items = search_data_with_cache(processed_question)
-
-        if not items:
-            return {"answer": "I'm sorry, I couldn't find any relevant medical information."}
-
-        # Use the first item from the search results to generate a response
-        response_data = items[0]
-        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
-        ai_response = await call_openai_api(prompt)
-
-        return {"answer": ai_response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Endpoint for Academic Research Support
-@app.post("/academic_research")
-async def academic_research(user_input: UserInput):
-    try:
-        # Validate the input
-        validate_input(user_input.question)
-
-        # Preprocess the input
-        processed_question = preprocess_input(user_input.question)
-
-        # Search for relevant data using cache
-        items = search_data_with_cache(processed_question)
-
-        if not items:
-            return {"answer": "I'm sorry, I couldn't find any relevant information for your academic research."}
-
-        # Use the first item from the search results to generate a response
-        response_data = items[0]
-        prompt = f"User question: {processed_question}\nRelevant data: {response_data}\nGenerate a response."
-        ai_response = await call_openai_api(prompt)
-
-        return {"answer": ai_response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Endpoint for Coding Support
-@app.post("/coding_support")
-async def coding_support(user_input: UserInput):
-    try:
-        # Validate the input
-        validate_input(user_input.question)
-
-        # Preprocess the input
-        processed_question = preprocess_input(user_input.question)
-
-        # Generate a response using the LLM
-        response = llm_chain.run(processed_question)
-
-        # Return the response
-        return {"answer": response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-class SupportService(ABC):
-    @abstractmethod
-    async def handle_request(self, user_input: UserInput):
-        pass
-
-@app.post("/legal_support")
-async def legal_support(user_input: UserInput):
-    service = LegalSupportService()
-    return await service.handle_request(user_input)
 
 @app.post("/travel_planning")
 async def travel_planning(user_input: UserInput):
